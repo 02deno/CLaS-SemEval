@@ -1,0 +1,9 @@
+# Steering scaffold. The official scorer's extra dependencies (vllm, fasttext,
+# datasets) stay in third_party/CLaS-SemEval-2027/requirements.txt.
+torch
+transformers>=4.44
+accelerate>=0.34
+# Graphs in notebooks/clas_kod_rehberi.ipynb
+seaborn>=0.13
+matplotlib>=3.8
+pandas>=2.2
