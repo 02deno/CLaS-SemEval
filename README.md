@@ -5,7 +5,7 @@ Course project for SemEval 2027 Task 7 (CLaS). A question comes in one language.
 ## Read first
 
 - Task notes, the inference-time explanation, and paper summaries: [docs/literature_review.md](docs/literature_review.md)
-- Official shared-task code, commit `2702627c3bb7d0cf8ed0598cdc326f77f2ed362e`: [third_party/CLaS-SemEval-2027](third_party/CLaS-SemEval-2027)
+- Organizers' code ships in this repo at commit `2702627c3bb7d0cf8ed0598cdc326f77f2ed362e`: [third_party/CLaS-SemEval-2027](third_party/CLaS-SemEval-2027)
 
 ## Setup
 

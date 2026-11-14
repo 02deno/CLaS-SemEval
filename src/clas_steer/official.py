@@ -1,4 +1,4 @@
-"""Pinned checkout of the official CLaS shared-task repository.
+"""Vendored snapshot of the official CLaS shared-task repository.
 
 ``evaluate.py`` in that checkout is the scorer. This module only puts it on
 ``sys.path`` so we can reuse its language list and JSON helpers. It does not
@@ -10,8 +10,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# Shallow clone of https://github.com/d-gurgurov/CLaS-SemEval-2027
-# `git rev-parse HEAD` at the time this project was wired up.
+# Snapshot of https://github.com/d-gurgurov/CLaS-SemEval-2027
+# copied into third_party so a clone of this repo needs no second checkout.
+# The same hash is in third_party/CLaS-SemEval-2027/UPSTREAM_COMMIT.
 OFFICIAL_COMMIT = "2702627c3bb7d0cf8ed0598cdc326f77f2ed362e"
 
 # Top-level keys evaluate.py indexes, plus the extra keys run_baseline.py writes.
@@ -42,8 +43,11 @@ def official_root() -> Path:
 
 
 def checkout_commit(root: Path | None = None) -> str | None:
-    """Return the git commit of the official checkout, if the clone is intact."""
+    """Return the upstream commit recorded for the vendored official code."""
     root = official_root() if root is None else root
+    pin = root / "UPSTREAM_COMMIT"
+    if pin.is_file():
+        return pin.read_text(encoding="utf-8").strip()
     git_dir = root / ".git"
     head = git_dir / "HEAD"
     if not head.is_file():
@@ -72,9 +76,8 @@ def import_official():
     root = official_root()
     if not (root / "clas" / "languages.py").is_file():
         raise FileNotFoundError(
-            "Official CLaS repo is missing at "
-            f"{root}. Clone https://github.com/d-gurgurov/CLaS-SemEval-2027 "
-            f"(commit {OFFICIAL_COMMIT})."
+            "Vendored CLaS code is missing at "
+            f"{root}. It ships inside this repo at commit {OFFICIAL_COMMIT}."
         )
     root_str = str(root)
     if root_str not in sys.path:
