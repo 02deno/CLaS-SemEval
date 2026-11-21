@@ -13,7 +13,7 @@ from pathlib import Path
 # Snapshot of https://github.com/d-gurgurov/CLaS-SemEval-2027
 # copied into third_party so a clone of this repo needs no second checkout.
 # The same hash is in third_party/CLaS-SemEval-2027/UPSTREAM_COMMIT.
-OFFICIAL_COMMIT = "2702627c3bb7d0cf8ed0598cdc326f77f2ed362e"
+OFFICIAL_COMMIT = "65a43da900bb18a1d078f9c39b19b0a056cf944e"
 
 # Top-level keys evaluate.py indexes, plus the extra keys run_baseline.py writes.
 # The scorer itself reads source_language, target_language, results[].output,

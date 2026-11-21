@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Score CLaS generations: LFS, OR, and the primary metric LSS.
+"""Score CLaS generations: LFS, OR, LQ, and the primary metric LSS.
 
 LFS  Language Forcing Success - fraction of outputs whose fastText LID label
      matches the target language, in [0, 1].
 OR   Output Relevance - LLM-as-a-judge score in {0, 1, 2}, normalised to [0, 1].
-LSS  Language Steering Score - harmonic mean of LFS and OR.
+LQ   Language Quality - LLM-as-a-judge score in {0, 1, 2} for fluency and grammaticality,
+     normalised to [0, 1].
+LSS  Language Steering Score - harmonic mean of LFS, OR, and LQ.
 
 Usage
 -----
@@ -19,7 +21,7 @@ from pathlib import Path
 from clas import languages as L
 from clas.io_utils import read_json, write_json
 
-JUDGE_SYSTEM = """You are an impartial judge evaluating a response from a language steering experiment. A question was asked in {source}, and the model was steered to respond in {target}.
+OR_SYSTEM = """You are an impartial judge evaluating a response from a language steering experiment. A question was asked in {source}, and the model was steered to respond in {target}.
 
 Do NOT evaluate which language the response is in or whether steering succeeded. Judge the response solely on its content, regardless of language.
 
@@ -30,11 +32,24 @@ Score on relevance and coherence:
 
 Give a brief explanation, then the rating in exactly this format: "Rating: [[score]]"."""
 
+LQ_SYSTEM = """You are an impartial judge evaluating a response from a language steering experiment. A question was asked in {source}, and the model was steered to respond in {target}.
+
+Do NOT evaluate which language the response is in, whether steering succeeded, or whether it answers the question. Judge the response solely on the quality of its language: grammar, spelling, word choice, and fluency, as a native speaker of the language it is written in would.
+
+Score on language quality:
+- 0: ungrammatical, broken, or unnatural throughout, or gibberish/degenerate text.
+- 1: understandable, but with frequent errors, awkward phrasing, or unnatural mixing of languages.
+- 2: fluent and natural, with at most minor errors.
+
+Give a brief explanation, then the rating in exactly this format: "Rating: [[score]]"."""
+
+JUDGES = {"or": OR_SYSTEM, "lq": LQ_SYSTEM}
+
 JUDGE_USER = "Question ({source}):\n{question}\n\nResponse ({target}):\n{response}\n"
 
 
-def harmonic(a: float, b: float) -> float:
-    return 0.0 if a + b == 0 else 2 * a * b / (a + b)
+def harmonic(*xs: float) -> float:
+    return 0.0 if min(xs) == 0 else len(xs) / sum(1 / x for x in xs)
 
 
 # --------------------------------------------------------------------------- #
@@ -80,7 +95,7 @@ def predict_lang(lid, text: str, mapping: dict, min_confidence: float = 0.9) -> 
 
 
 # --------------------------------------------------------------------------- #
-# OR
+# OR, LQ
 # --------------------------------------------------------------------------- #
 def parse_rating(text: str):
     for pattern in (r"Rating:\s*\[\[([012])\]\]", r"\[\[([012])\]\]", r"\b([012])\b\s*$"):
@@ -91,18 +106,19 @@ def parse_rating(text: str):
 
 
 def judge_all(files: list, model, params, thinking: bool = False) -> dict:
-    """Score every (file, item) in one batched pass. Returns {file: [scores]}."""
+    """Score every (judge, file, item) in one batched pass. Returns {judge: {file: [scores]}}."""
     msgs, index = [], []
     for f in files:
         data = read_json(f)
         src, tgt = L.get(data["source_language"]).name, L.get(data["target_language"]).name
         for i, r in enumerate(data["results"]):
-            msgs.append([
-                {"role": "system", "content": JUDGE_SYSTEM.format(source=src, target=tgt)},
-                {"role": "user", "content": JUDGE_USER.format(
-                    source=src, target=tgt, question=r["original_prompt"], response=r["output"])},
-            ])
-            index.append((f, i))
+            for k, system in JUDGES.items():
+                msgs.append([
+                    {"role": "system", "content": system.format(source=src, target=tgt)},
+                    {"role": "user", "content": JUDGE_USER.format(
+                        source=src, target=tgt, question=r["original_prompt"], response=r["output"])},
+                ])
+                index.append((k, f))
 
     try:
         outputs = model.chat(msgs, sampling_params=params,
@@ -110,9 +126,9 @@ def judge_all(files: list, model, params, thinking: bool = False) -> dict:
     except Exception:
         outputs = model.chat(msgs, sampling_params=params)
 
-    scores = {f: [] for f in files}
-    for (f, _), o in zip(index, outputs):
-        scores[f].append(parse_rating(o.outputs[0].text))
+    scores = {k: {f: [] for f in files} for k in JUDGES}
+    for (k, f), o in zip(index, outputs):
+        scores[k][f].append(parse_rating(o.outputs[0].text))
     return scores
 
 
@@ -123,7 +139,8 @@ def report(pair_scores: dict, out_dir: Path) -> None:
         n = len(rows)
         lfs = sum(r["lfs"] for r in rows) / n
         orl = sum(r["or"] for r in rows) / n
-        return {"lfs": lfs, "or": orl, "lss": harmonic(lfs, orl), "n_pairs": n}
+        lq = sum(r["lq"] for r in rows) / n
+        return {"lfs": lfs, "or": orl, "lq": lq, "lss": harmonic(lfs, orl, lq), "n_pairs": n}
 
     rows = list(pair_scores.values())
     by_target = {}
@@ -137,10 +154,10 @@ def report(pair_scores: dict, out_dir: Path) -> None:
     o = summary["overall"]
     lines = ["# CLaS baseline results", "",
              f"Pairs: {o['n_pairs']}", "",
-             "| scope | LFS | OR | LSS |", "|---|---|---|---|",
-             f"| **overall** | {o['lfs']:.3f} | {o['or']:.3f} | **{o['lss']:.3f}** |"]
+             "| scope | LFS | OR | LQ | LSS |", "|---|---|---|---|---|",
+             f"| **overall** | {o['lfs']:.3f} | {o['or']:.3f} | {o['lq']:.3f} | **{o['lss']:.3f}** |"]
     for tgt, s in sorted(by_target.items(), key=lambda kv: -kv[1]["lss"]):
-        lines.append(f"| → {L.get(tgt).name} ({tgt}) | {s['lfs']:.3f} | {s['or']:.3f} | {s['lss']:.3f} |")
+        lines.append(f"| → {L.get(tgt).name} ({tgt}) | {s['lfs']:.3f} | {s['or']:.3f} | {s['lq']:.3f} | {s['lss']:.3f} |")
     (out_dir / "scores.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     print("\n".join(lines[3:]))
@@ -176,9 +193,9 @@ def main() -> int:
         hits = [predict_lang(lid, r["output"], mapping, args.lid_min_confidence) == tgt for r in data["results"]]
         lfs[f] = sum(hits) / len(hits)
 
-    # --- OR ---
+    # --- OR, LQ ---
     if args.skip_judge:
-        judged = {f: [] for f in files}
+        judged = {k: {f: [] for f in files} for k in JUDGES}
     else:
         import torch
         from vllm import LLM, SamplingParams
@@ -193,12 +210,12 @@ def main() -> int:
     pair_scores = {}
     for f in files:
         data = read_json(f)
-        valid = [s for s in judged[f] if s is not None]
-        orl = (sum(valid) / (2 * len(valid))) if valid else 0.0
+        valid = {k: [s for s in judged[k][f] if s is not None] for k in JUDGES}
+        js = {k: (sum(v) / (2 * len(v))) if v else 0.0 for k, v in valid.items()}
         pair_scores[f"{data['source_language']}_to_{data['target_language']}"] = {
             "source": data["source_language"], "target": data["target_language"],
-            "lfs": lfs[f], "or": orl, "lss": harmonic(lfs[f], orl),
-            "n_items": len(data["results"]), "n_unparsed_judge": len(judged[f]) - len(valid),
+            "lfs": lfs[f], **js, "lss": harmonic(lfs[f], *js.values()), "n_items": len(data["results"]),
+            "n_unparsed_judge": {k: len(judged[k][f]) - len(v) for k, v in valid.items()},
         }
 
     report(pair_scores, out_dir)

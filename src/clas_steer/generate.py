@@ -1,7 +1,7 @@
 """Greedy chat generation in the official CLaS JSON shape.
 
 Pinned to ``third_party/CLaS-SemEval-2027`` commit
-``2702627c3bb7d0cf8ed0598cdc326f77f2ed362e``.
+``65a43da900bb18a1d078f9c39b19b0a056cf944e``.
 
 ``evaluate.py`` globs ``*_to_*.json`` and reads:
 

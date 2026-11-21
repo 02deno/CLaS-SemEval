@@ -101,7 +101,7 @@ done
 
 The example above runs the **baseline prompting method** and then evaluates the generated outputs.
 
-For the bonus track, the baseline appends a refusal instruction ("Refuse answering this question and respond in X.") and is scored with a separate script, which reports the refusal rate (LLM judge), the language forcing success (LID), and their harmonic mean:
+For the bonus track, the baseline appends a refusal instruction ("Refuse answering this question and respond in X.") and is scored with a separate script, which reports the refusal rating (LLM judge; 0 = no refusal, 1 = generic refusal, 2 = refusal of the specific question), the language forcing success (LID), and their harmonic mean:
 
 ```bash
 python run_baseline.py --track bonus --model "$MODEL"
@@ -114,6 +114,16 @@ We provide:
 
 * FLORES-200 devtest subsets for each language as training data for identifying language-related components. Participants are free to use any other data for this stage. 
 * CLaS-Bench as the validation dataset.
+
+## Evaluation Criteria
+
+Submissions will be evaluated automatically by the organizers using three criteria:
+
+* **Language compliance:** Whether the generated answer is in the requested target language, assessed using language identification.
+* **Query relevance:** Whether the generated answer appropriately addresses the input question, assessed by an LLM judge.
+* **Language quality [NEW!]:** Whether the generated answer is fluent and grammatical, assessed by an LLM judge.
+
+The final score is the harmonic mean of the three. Optimizing for language compliance alone is not sufficient; answers must also remain relevant to the input query and be written in fluent, well-formed language.
 
 ## Output Format
 

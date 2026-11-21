@@ -65,19 +65,20 @@ There is a real disagreement about depth. CLaS-Bench finds language geometry in 
 
 ## 4. Scores
 
-The official evaluator (`third_party/CLaS-SemEval-2027/evaluate.py`) reports three numbers.
+The official evaluator (`third_party/CLaS-SemEval-2027/evaluate.py`) reports four numbers.
 
 - LFS, language forcing success. Fraction of outputs whose language ID is the target language, in `[0, 1]`. The identifier is fastText (`facebook/fasttext-language-identification`). If confidence is below 0.9, Chinese, Japanese, and Korean can still be accepted from the script. Other low-confidence outputs count as a miss.
 - OR, output relevance. A judge model (`Qwen/Qwen3-8B` in the script) scores the answer 0, 1, or 2 for whether it addresses the question. The judge is told to ignore the language. The mean score is divided by 2 so OR is in `[0, 1]`.
-- LSS, language steering score. The harmonic mean:
+- LQ, language quality (added upstream on 17 November 2026). The same judge scores grammar, spelling, word choice, and fluency 0, 1, or 2, ignoring language and relevance. Unnatural mixing of languages gets at most 1; degenerate or repetitive text gets 0. Divided by 2 so LQ is in `[0, 1]`.
+- LSS, language steering score. The harmonic mean of the three:
 
 ```
-LSS = 2 * LFS * OR / (LFS + OR)
+LSS = 3 / (1/LFS + 1/OR + 1/LQ)
 ```
 
-If either term is 0, LSS is 0. Fluency in the wrong language and gibberish in the right language both lose.
+If any term is 0, LSS is 0. Fluency in the wrong language and gibberish in the right language both lose.
 
-The bonus script (`evaluate_refusal.py`) reports a refusal rate from an LLM judge, language-forcing success, and their harmonic mean.
+The bonus script (`evaluate_refusal.py`) reports a refusal rating from an LLM judge (0 no refusal, 1 generic refusal, 2 refusal of the specific question, divided by 2), language-forcing success, and their harmonic mean.
 
 Our generator writes the JSON shape that `evaluate.py` already reads. See `src/clas_steer/generate.py`.
 
